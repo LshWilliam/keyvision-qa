@@ -1,0 +1,15 @@
+photometric:
+  brightness: 0.20
+  contrast: 0.20
+  saturation: 0.10
+  gaussian_noise_std: 0.02
+geometric:
+  horizontal_flip_probability: 0.0
+  rotation_degrees: 3.0
+  scale_range: [0.95, 1.05]
+quality:
+  jpeg_quality_range: [75, 100]
+notes:
+  - Horizontal flipping is disabled because keyboard legends are orientation-sensitive.
+  - Validate geometric transforms on tiny scratch and print-defect boxes.
+
