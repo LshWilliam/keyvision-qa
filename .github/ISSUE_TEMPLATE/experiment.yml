@@ -1,0 +1,27 @@
+name: Experiment proposal
+description: Propose a reproducible model, data, or deployment experiment.
+title: "[Experiment] "
+labels: ["experiment"]
+body:
+  - type: textarea
+    id: hypothesis
+    attributes:
+      label: Hypothesis
+      description: State one falsifiable claim.
+    validations:
+      required: true
+  - type: textarea
+    id: data
+    attributes:
+      label: Data and rights
+      description: Describe split, provenance, license, and privacy constraints.
+    validations:
+      required: true
+  - type: textarea
+    id: protocol
+    attributes:
+      label: Evaluation protocol
+      description: Define baselines, metrics, hardware, seeds, and acceptance criteria.
+    validations:
+      required: true
+
