@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from pathlib import Path
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageFilter
 
 from keyvision.types import AnomalyPrediction
@@ -52,9 +53,11 @@ class GaussianTemplateAnomalyDetector:
         standardized = np.abs(features - self.mean) / self.std
         heatmap_small = np.sqrt(np.mean(standardized**2, axis=2))
         score = float(np.quantile(heatmap_small, 0.995))
-        heatmap_image = Image.fromarray(
-            np.uint8(np.clip(heatmap_small / max(self.threshold * 2, 1e-6), 0, 1) * 255)
+        heatmap_pixels: NDArray[np.uint8] = np.asarray(
+            np.clip(heatmap_small / max(self.threshold * 2, 1e-6), 0, 1) * 255,
+            dtype=np.uint8,
         )
+        heatmap_image = Image.fromarray(heatmap_pixels)
         heatmap = (
             np.asarray(
                 heatmap_image.resize(image.size, Image.Resampling.BILINEAR), dtype=np.float32

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import numpy as np
+from numpy.typing import NDArray
 from PIL import Image, ImageDraw
 
 from keyvision.types import Prediction
@@ -32,4 +33,5 @@ def overlay_heatmap(image: Image.Image, heatmap: np.ndarray, alpha: float = 0.45
     colored[..., 1] = np.uint8(np.sqrt(normalized) * 170)
     source = np.asarray(image.convert("RGB"), dtype=np.float32)
     blended = source * (1 - alpha) + colored.astype(np.float32) * alpha
-    return Image.fromarray(np.uint8(np.clip(blended, 0, 255)))
+    blended_pixels: NDArray[np.uint8] = np.asarray(np.clip(blended, 0, 255), dtype=np.uint8)
+    return Image.fromarray(blended_pixels)

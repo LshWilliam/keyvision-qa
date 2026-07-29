@@ -98,7 +98,7 @@ def build_demo(config_path: str | None = None, checkpoint: str | None = None) ->
             value="Known defect detector",
             label="Inspection branch",
         )
-        run_button = gr.Button("Inspect", variant="primary")
+        run_button: Any = gr.Button("Inspect", variant="primary")
         metadata = gr.JSON(label="Inference details")
         run_button.click(
             fn=service.inspect,
