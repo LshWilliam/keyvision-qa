@@ -10,7 +10,10 @@ from PIL import Image
 from keyvision.config import load_config
 from keyvision.data.io import load_manifest
 from keyvision.evaluation.confusion import detection_confusion_matrix
-from keyvision.evaluation.metrics import evaluate_detections
+from keyvision.evaluation.metrics import (
+    bootstrap_confidence_intervals,
+    evaluate_detections,
+)
 from keyvision.evaluation.reporting import export_evaluation
 from keyvision.inference.predictor import DetectorPredictor
 from keyvision.types import Detection
@@ -24,6 +27,8 @@ def main() -> None:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--split", choices=("train", "val", "test"), default="test")
     parser.add_argument("--output", default="artifacts/evaluation")
+    parser.add_argument("--bootstrap-samples", type=int, default=0)
+    parser.add_argument("--bootstrap-seed", type=int, default=42)
     args = parser.parse_args()
     config = load_config(args.config)
     root = Path(config.data.root)
@@ -51,6 +56,14 @@ def main() -> None:
             ]
         )
     results = evaluate_detections(predictions, ground_truth, config.model.class_names)
+    if args.bootstrap_samples:
+        results["confidence_intervals"] = bootstrap_confidence_intervals(
+            predictions,
+            ground_truth,
+            config.model.class_names,
+            samples=args.bootstrap_samples,
+            seed=args.bootstrap_seed,
+        )
     results["confusion_matrix"] = detection_confusion_matrix(
         predictions, ground_truth, len(config.model.class_names)
     )

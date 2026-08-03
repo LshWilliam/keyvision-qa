@@ -17,9 +17,11 @@ sheet in `assets/` is committed.
 
 ## Annotation contract
 
-Manifests are UTF-8 JSONL. Each record contains a repository-independent relative image path,
-declared image dimensions, zero or more COCO-style absolute `xywh` boxes, and a `synthetic` flag.
-Category identifiers are zero-based and must match the configured class order.
+Manifests are UTF-8 JSONL. Each record contains a root-constrained relative image path, declared
+dimensions, zero or more COCO-style absolute `xywh` boxes, a `synthetic` flag, and an optional
+`group_id`. Use one group for correlated images from the same SKU/lot/session or source video.
+Category identifiers are zero-based and must map one-to-one to names. Validation rejects byte-level
+duplicates, path traversal, invalid boxes, corrupt images, and category mapping conflicts.
 
 Run validation before any split, training, or evaluation:
 

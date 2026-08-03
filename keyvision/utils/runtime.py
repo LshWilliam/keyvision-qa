@@ -25,8 +25,8 @@ def configure_logging(level: int = logging.INFO) -> None:
     )
 
 
-def seed_everything(seed: int) -> None:
-    """Seed Python, NumPy, and PyTorch for repeatable smoke experiments."""
+def seed_everything(seed: int, deterministic: bool = True) -> None:
+    """Seed runtimes and configure deterministic algorithms when requested."""
 
     random.seed(seed)
     np.random.seed(seed)
@@ -34,6 +34,18 @@ def seed_everything(seed: int) -> None:
     if torch.cuda.is_available():
         torch.cuda.manual_seed_all(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
+    torch.backends.cudnn.benchmark = not deterministic
+    torch.backends.cudnn.deterministic = deterministic
+    torch.use_deterministic_algorithms(deterministic, warn_only=True)
+
+
+def seed_worker(worker_id: int) -> None:
+    """Seed one DataLoader worker from PyTorch's worker-specific initial seed."""
+
+    del worker_id
+    worker_seed = torch.initial_seed() % (2**32)
+    random.seed(worker_seed)
+    np.random.seed(worker_seed)
 
 
 def resolve_device(requested: str) -> torch.device:

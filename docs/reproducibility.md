@@ -22,3 +22,18 @@ operator implementation. Reproducible splitting and seeded initialization do not
 bitwise-identical accelerator training. Capture the generated `run_summary.json`, dependency
 versions, OS, GPU, and commit SHA with any reported experiment.
 
+
+## CI dependency baseline
+
+GitHub Actions installs direct dependencies against `requirements-ci.txt`. The file records the
+versions that passed lint, type checking, tests, packaging, and smoke validation together. It is a
+constraint baseline rather than a complete transitive lock and should be updated deliberately.
+
+```bash
+python -m pip install -c requirements-ci.txt -e ".[dev,demo,deploy]"
+python -m pip check
+```
+
+`training.deterministic` enables deterministic PyTorch algorithms in warning mode, disables cuDNN
+benchmarking, and seeds each DataLoader worker from its worker-specific PyTorch seed. Determinism
+can reduce accelerator throughput and still does not guarantee identical results across releases or

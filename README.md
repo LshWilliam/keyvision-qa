@@ -18,9 +18,9 @@ ONNX edge deployment in one reproducible computer-vision project.**
 | --- | --- |
 | What problem? | Find known keyboard defects while also localizing novel visual anomalies. |
 | What methods? | Torchvision Faster R-CNN adapter, export-friendly tiny smoke detector, and a fixture-aligned Gaussian anomaly template. |
-| What results? | Real-data training has **not** been run. Local synthetic smoke results are reported only after execution. |
+| What results? | Real-data training has **not** been run. The verified smoke run uses validation-mAP checkpoint selection and bootstrap-capable reporting without claiming model quality. |
 | How do I run it? | `pip install -e ".[dev,demo,deploy]"`, then `python scripts/smoke_test.py` or `python app.py`. |
-| Engineering highlights? | Typed configuration, deterministic data pipeline, resumable training, transparent detection metrics, FP/FN mining, ONNX parity checks, Gradio, tests, CI, and Docker. |
+| Engineering highlights? | Group-isolated splits, content-hash validation, validation-mAP model selection, uncertainty-aware metrics, ONNX parity, Gradio, 25 tests, coverage-gated CI, packaging, and Docker. |
 
 ![Synthetic keyboard inspection examples](assets/synthetic_contact_sheet.png)
 
@@ -43,18 +43,18 @@ evaluation, error analysis, export, parity validation, batch/camera inference, a
 
 ## Core features
 
-- Portable JSONL dataset format with image integrity, dimension, box-boundary, category, and
-  duplicate checks.
+- Portable JSONL with root-constrained paths, image integrity, byte-level duplicate detection,
+  category-map consistency, and optional `group_id` leakage control.
 - Reproducible class-aware train/validation/test splitting and dataset statistics.
 - Clearly watermarked synthetic generator for pipeline tests—not model claims.
 - Unified detector interface with:
   - **Faster R-CNN MobileNetV3 FPN**, the production-oriented known-defect candidate.
   - **Tiny single-defect CNN**, used only for fast CI, ONNX, and end-to-end smoke tests.
-- Resumable checkpoints, best/last checkpoint saving, fixed seeds, typed YAML configuration, and
-  captured environment/run metadata.
+- `best.pt` selected by validation mAP@50, `last.pt` recovery, deterministic worker seeding,
+  typed YAML configuration, and captured environment/run metadata.
 - Fixture-aligned Gaussian normal template with anomaly score and pixel heatmap.
-- Precision, recall, F1, AP@50, AP@50:95, per-class PR data, confusion matrix, latency, FPS,
-  parameter count, and file-size utilities.
+- Precision, recall, F1, support-aware 101-point AP, image-bootstrap confidence intervals,
+  per-class PR data, confusion matrix, latency, FPS, parameter count, and model size.
 - JSON, CSV, and Markdown result export plus confidence-sorted FP/FN artifacts.
 - Native PyTorch and ONNX Runtime inference, numerical parity verification, image/folder/camera
   entry points, Gradio demo, Dockerfile, pytest, Ruff, mypy, and GitHub Actions.
@@ -176,11 +176,12 @@ python -m keyvision.evaluation.cli --config configs/smoke.yaml --checkpoint arti
 Each UTF-8 JSONL line uses relative paths and COCO-style absolute `xywh` boxes:
 
 ```json
-{"image":"images/sample.png","width":1280,"height":720,"annotations":[{"bbox":[100,120,30,24],"category_id":0,"category":"missing_keycap"}],"synthetic":false}
+{"image":"images/sample.png","width":1280,"height":720,"group_id":"sku-a/lot-17/session-03","annotations":[{"bbox":[100,120,30,24],"category_id":0,"category":"missing_keycap"}],"synthetic":false}
 ```
 
 Keep raw data under ignored `data/raw/` or another non-repository path, then set `data.root` and
-manifest paths in a new YAML file. Never commit company imagery or data without explicit authority.
+manifest paths in a new YAML file. Assign `group_id` at the SKU/lot/session or source-video level so
+correlated frames cannot cross splits. Never commit company imagery or data without authority.
 See [data/README.md](data/README.md) and [DATASET_CARD.md](DATASET_CARD.md).
 
 ## Train, validate, and test
@@ -188,12 +189,14 @@ See [data/README.md](data/README.md) and [DATASET_CARD.md](DATASET_CARD.md).
 ```bash
 python -m keyvision.training.train --config configs/default.yaml
 python -m keyvision.evaluation.cli --config configs/default.yaml --checkpoint artifacts/runs/fasterrcnn/best.pt --split val
-python -m keyvision.evaluation.cli --config configs/default.yaml --checkpoint artifacts/runs/fasterrcnn/best.pt --split test
+python -m keyvision.evaluation.cli --config configs/default.yaml --checkpoint artifacts/runs/fasterrcnn/best.pt --split test --bootstrap-samples 1000 --bootstrap-seed 42
 ```
 
+`best.pt` is selected by validation mAP@50 after every epoch; `last.pt` is retained for recovery.
 Set `training.resume` to `artifacts/runs/fasterrcnn/last.pt` to continue an interrupted run. The
-exact configuration and environment are stored with the run summary. Select thresholds on
-validation data only; reserve test data for a frozen final evaluation.
+configuration, environment, validation history, and selection metric are stored with the run.
+Select operational thresholds on validation only and reserve test for a frozen final evaluation.
+See [docs/evaluation_protocol.md](docs/evaluation_protocol.md).
 
 ## Inference
 
@@ -245,19 +248,20 @@ than falsely claimed as complete.
 
 | Backend | Device | Median latency | FPS | Parameters | Model size | Status |
 | --- | --- | ---: | ---: | ---: | ---: | --- |
-| PyTorch tiny | CPU | 1.111 ms | 900.3 | 24,523 | 312,331 B | 30 repetitions; smoke only |
-| ONNX Runtime tiny | CPU | 0.414 ms | 2,413.4 | 24,523 | 99,561 B | 30 repetitions; smoke only |
+| PyTorch tiny | CPU | 0.744 ms | 1,345.0 | 24,523 | 312,587 B | 30 repetitions; smoke only |
+| ONNX Runtime tiny | CPU | 0.359 ms | 2,784.4 | 24,523 | 99,561 B | 30 repetitions; smoke only |
 | Faster R-CNN | CPU/GPU | — | — | — | — | Not benchmarked |
 
-The verified local run on 2026-07-29 used Python 3.10.11, PyTorch 2.10.0 CPU, batch size 4, a
+The verified local run on 2026-07-30 used Python 3.10.11, PyTorch 2.10.0 CPU, batch size 4, a
 160 by 160 input, and seed 42. It generated 42 images split 30/6/6, found zero validation issues,
-and completed one training epoch with train loss 2.4734. The detector emitted no boxes above the
-0.20 threshold on the six-image synthetic test set, producing six false negatives and zero true or
-false positives. This weak result is reported rather than hidden: one smoke epoch is enough to test
-the pipeline, not to train an accurate detector.
+and completed one training epoch with train loss 2.5053. Validation mAP@50 was 0.0; `best.pt` was
+selected through the validation path. The detector emitted no boxes above the 0.20 threshold on the
+six-image synthetic test set, producing six false negatives and zero true or false positives. A
+100-sample bootstrap also produced all-zero intervals. This weak result is reported rather than
+hidden: one smoke epoch tests the pipeline, not detector quality.
 
 ONNX export at opset 17 passed numerical parity with a maximum absolute difference of
-`3.73e-08`. Latency values are batch-one model-forward measurements after three warmups; they omit
+`2.24e-08`. Latency values are batch-one model-forward measurements after three warmups; they omit
 capture, visualization, and business I/O. The installed PyTorch build was CPU-only, so no GPU result
 is claimed even though the machine has a physical NVIDIA GPU.
 
@@ -274,13 +278,16 @@ contrast, tiny targets, viewpoint, illumination, occlusion, and domain shift in
 ```bash
 ruff check .
 ruff format --check .
-mypy keyvision scripts
-pytest
+mypy keyvision scripts tests
+pytest --cov=keyvision --cov-report=term --cov-fail-under=60
+python scripts/check_docs.py
+python -m build
 python scripts/smoke_test.py
 ```
 
-CI executes install, lint, formatting, static typing, unit tests, and the end-to-end smoke test on
-every push and pull request to `main`.
+CI installs against `requirements-ci.txt`, runs `pip check`, lint, formatting, full static typing,
+60% coverage, documentation links, wheel/sdist packaging, and the end-to-end smoke test on every
+push and pull request to `main`.
 
 ## Project structure
 
@@ -327,13 +334,16 @@ Runtime, Pillow, NumPy, PyYAML, Gradio, or OpenCV.
 - The current installed PyTorch build may be CPU-only even when the machine has an NVIDIA GPU.
 - Threshold calibration, line integration, reject mechanics, drift monitoring, and operator studies
   require production context not available in this public project.
+- The transparent AP implementation is not a full COCO evaluator; serious benchmarks must be
+  cross-checked with COCO API or TorchMetrics as specified in the evaluation protocol.
 
 ## Roadmap
 
 - Improve small-defect detection with tiled training/inference and multi-scale validation.
 - Add domain-adaptation experiments across cameras, keyboards, and lighting cells.
 - Add quantized edge inference with accuracy/latency trade-off reports.
-- Expand an explicitly licensed keyboard defect dataset and publish its full provenance.
+- Evaluate licensed keyboard-layout pretraining and a real industrial anomaly benchmark while
+  keeping keyboard-defect claims separate until defect labels with clear rights are available.
 
 See [docs/design_decisions.md](docs/design_decisions.md) for rejected alternatives and
 [docs/interview_guide.md](docs/interview_guide.md) for project discussion prompts.

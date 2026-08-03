@@ -28,8 +28,11 @@
 
 ## Evaluation
 
-The project exports precision, recall, F1, AP@50, AP@50:95, per-class PR data, a confusion matrix,
-latency, FPS, parameter count, and file size. There are no production metrics in this release.
+The project exports operational precision/recall/F1, support-aware 101-point AP, per-class PR data,
+a confusion matrix, optional image-bootstrap confidence intervals, latency, FPS, parameters, and
+file size. Training selects `best.pt` on validation mAP@50 rather than training loss. The readable
+AP implementation is not fully COCO-equivalent and serious benchmarks require an official COCO API
+cross-check. There are no production metrics in this release.
 
 ## Safety and human oversight
 

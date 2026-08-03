@@ -51,6 +51,8 @@ class TrainingConfig:
     device: str = "auto"
     output_dir: str = "artifacts/runs/default"
     resume: str | None = None
+    validation_score_threshold: float = 0.05
+    deterministic: bool = True
 
 
 @dataclass(frozen=True)
@@ -92,6 +94,8 @@ def load_config(path: str | Path) -> ProjectConfig:
         raise ValueError("model.num_classes must equal the number of class_names")
     if not 0.0 <= model.score_threshold <= 1.0:
         raise ValueError("model.score_threshold must be in [0, 1]")
+    if not 0.0 <= training.validation_score_threshold <= 1.0:
+        raise ValueError("training.validation_score_threshold must be in [0, 1]")
     if training.epochs < 1 or training.batch_size < 1:
         raise ValueError("training.epochs and batch_size must be positive")
     return ProjectConfig(data=data, model=model, training=training)

@@ -47,6 +47,7 @@ class ImageRecord:
     height: int
     annotations: tuple[Annotation, ...]
     synthetic: bool = False
+    group_id: str | None = None
 
     @classmethod
     def from_dict(cls, payload: dict[str, Any]) -> ImageRecord:
@@ -55,21 +56,26 @@ class ImageRecord:
         raw_annotations = payload.get("annotations", [])
         if not isinstance(raw_annotations, list):
             raise ValueError("annotations must be a list")
+        group_id = payload.get("group_id")
         return cls(
             image=str(payload["image"]),
             width=int(payload["width"]),
             height=int(payload["height"]),
             annotations=tuple(Annotation.from_dict(item) for item in raw_annotations),
             synthetic=bool(payload.get("synthetic", False)),
+            group_id=str(group_id) if group_id is not None else None,
         )
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize the record without machine-specific paths."""
 
-        return {
+        payload: dict[str, Any] = {
             "image": self.image.replace("\\", "/"),
             "width": self.width,
             "height": self.height,
             "annotations": [annotation.to_dict() for annotation in self.annotations],
             "synthetic": self.synthetic,
         }
+        if self.group_id is not None:
+            payload["group_id"] = self.group_id
+        return payload

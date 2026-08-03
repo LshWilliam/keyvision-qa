@@ -1,4 +1,4 @@
-.PHONY: install lint format type test smoke demo generate validate train evaluate export
+.PHONY: install lint format type test docs build smoke demo generate validate train evaluate export
 
 install:
 	python -m pip install -e ".[dev,demo,deploy,vision]"
@@ -12,10 +12,16 @@ format:
 	ruff format .
 
 type:
-	mypy keyvision scripts
+	mypy keyvision scripts tests
 
 test:
-	pytest
+	pytest --cov=keyvision --cov-report=term --cov-fail-under=60
+
+docs:
+	python scripts/check_docs.py
+
+build:
+	python -m build
 
 smoke:
 	python scripts/smoke_test.py

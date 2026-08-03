@@ -1,6 +1,7 @@
 # Local validation report
 
-**Execution date:** 2026-07-29  
+**Execution date:** 2026-07-30
+
 **Scope:** synthetic smoke verification only; not production model performance
 
 ## Environment
@@ -8,63 +9,61 @@
 - Windows 10 build 26200
 - Python 3.10.11
 - PyTorch 2.10.0+cpu
-- Physical GPU detected by `nvidia-smi`: NVIDIA GeForce RTX 5070 Laptop GPU, 8151 MiB
+- Physical GPU detected previously by `nvidia-smi`: NVIDIA GeForce RTX 5070 Laptop GPU, 8151 MiB
 - CUDA available to installed PyTorch: no
 
 ## Commands executed
 
 ```bash
-python -m pip install -e ".[dev,demo,deploy,vision]"
 ruff check .
 ruff format --check .
-mypy keyvision scripts
-pytest --basetemp=artifacts/pytest_tmp
-python scripts/smoke_test.py
-python -m keyvision.data.stats --manifest artifacts/synthetic/manifest.jsonl
-python -m keyvision.data.visualize --root artifacts/synthetic --manifest artifacts/synthetic/manifest.jsonl --output assets/synthetic_contact_sheet.png --limit 12
-python -m keyvision.evaluation.cli --config configs/smoke.yaml --checkpoint artifacts/runs/smoke/best.pt --split test
-python -m keyvision.inference.cli --config configs/smoke.yaml --checkpoint artifacts/runs/smoke/best.pt --input artifacts/synthetic/images/keyboard_0000.png
-python -m keyvision.deployment.onnx_infer --config configs/smoke.yaml --model artifacts/models/keyvision_tiny.onnx --input artifacts/synthetic/images/keyboard_0000.png
-python -m keyvision.training.train_anomaly --normal-dir artifacts/anomaly_normal
-python scripts/error_analysis.py --config configs/smoke.yaml --checkpoint artifacts/runs/smoke/best.pt
-python scripts/benchmark.py --config configs/smoke.yaml --checkpoint artifacts/runs/smoke/best.pt --onnx artifacts/models/keyvision_tiny.onnx --repetitions 30
+mypy keyvision scripts tests
+pytest --basetemp=artifacts/pytest_final_20260730 --cov=keyvision --cov-report=term-missing --cov-fail-under=60
 python scripts/check_docs.py
+python -m pip check
+python -m build
+python scripts/smoke_test.py
+python scripts/benchmark.py --config configs/smoke.yaml --checkpoint artifacts/runs/smoke/best.pt --onnx artifacts/models/keyvision_tiny.onnx --repetitions 30
+git diff --check
 ```
-
-The Gradio application was also launched on `127.0.0.1:7861`, returned HTTP 200 with a 20,800-byte
-HTML response, and was closed immediately after the health check.
 
 ## Quality gates
 
 | Gate | Actual result |
 | --- | --- |
 | Ruff lint | Passed |
-| Ruff format check | Passed, 67 files formatted |
-| mypy | Passed, 44 source files |
-| pytest | 12 passed in 9.25 seconds |
+| Ruff format check | Passed, 73 files checked |
+| mypy | Passed, 58 source files |
+| pytest | 25 passed in 11.86 seconds |
+| Coverage | 62.25%; required threshold 60% |
 | Warnings | 2 PyTorch legacy ONNX exporter deprecation warnings |
-| Documentation links | 11 Markdown files passed |
+| Documentation links | 13 Markdown files passed |
+| Dependency consistency | `pip check` passed |
+| Package build | sdist and wheel built without packaging deprecation warnings |
 | Dataset validation | 0 issues across 42 synthetic images |
-| Demo health check | HTTP 200 |
-| ONNX parity | Passed; maximum absolute difference 3.73e-08 |
+| ONNX parity | Passed; maximum absolute difference 2.24e-08 |
+
+The tests include group-isolated split behavior, duplicate-content and path-traversal rejection,
+class-schema conflict detection, absent-class AP semantics, deterministic bootstrap intervals, and
+validation-metric checkpoint selection.
 
 ## Synthetic execution result
 
 - Split: 30 train, 6 validation, 6 test
-- Training: 1 epoch, batch size 4, CPU, train loss 2.4733848572
+- Training: 1 epoch, batch size 4, CPU, train loss 2.5052678585
+- Checkpoint selection: `best.pt` selected by validation AP@50; `last.pt` retained for recovery
+- Best validation AP@50: 0.0
 - Test detections above 0.20: 0
-- Test counts: 0 TP, 0 FP, 6 FN
-- Precision, recall, F1, AP@50, AP@50:95: all 0.0
-- Interpretation: the end-to-end pipeline executed correctly; the model was not trained enough to
-  provide useful detections
+- Interpretation: the end-to-end pipeline executed correctly; one synthetic epoch is deliberately
+  insufficient evidence of useful defect detection performance
+- ONNX model: 99,561 bytes, export verified
 
 ## Batch-one forward benchmark
 
 | Backend | Median | P95 | FPS from median | Model size |
 | --- | ---: | ---: | ---: | ---: |
-| PyTorch CPU | 1.1107 ms | 1.9175 ms | 900.3 | 312,331 bytes |
-| ONNX Runtime CPU | 0.41435 ms | 0.5602 ms | 2,413.4 | 99,561 bytes |
+| PyTorch CPU | 0.7435 ms | 0.7595 ms | 1,345.0 | 312,587 bytes |
+| ONNX Runtime CPU | 0.3592 ms | 0.4604 ms | 2,784.4 | 99,561 bytes |
 
 These timings cover the tiny smoke model only. They omit capture, rendering, storage, and line
 integration. GPU comparison was not run because the installed PyTorch package is CPU-only.
-

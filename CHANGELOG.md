@@ -5,6 +5,15 @@ versioning.
 
 ## [Unreleased]
 
+### Added
+
+- Group-aware dataset splitting and SHA-256 duplicate-content validation
+- Validation-mAP checkpoint selection with deterministic DataLoader worker seeding
+- Support-aware AP semantics and optional image-bootstrap confidence intervals
+- 25-test suite with a 60% whole-package coverage gate
+- Reproducible CI constraints, dependency checks, documentation validation, and package builds
+
+
 ### Planned
 
 - Real, licensed keyboard dataset integration and production-oriented benchmarks

@@ -1,3 +1,6 @@
+status: design_only
+runtime_wired: false
+
 photometric:
   brightness: 0.20
   contrast: 0.20
@@ -11,5 +14,6 @@ quality:
   jpeg_quality_range: [75, 100]
 notes:
   - Horizontal flipping is disabled because keyboard legends are orientation-sensitive.
+  - This policy is not loaded by the current training runtime; box-safe transforms need implementation and tests first.
   - Validate geometric transforms on tiny scratch and print-defect boxes.
 

@@ -72,3 +72,34 @@ cross-check against COCO API because edge-case conventions differ.
 **Why:** numerical parity is stronger evidence than a successful file write. Faster R-CNN
 post-processing and NMS require a target-runtime decision, so the project documents that boundary.
 
+
+## DD-009: Group isolation outranks exact image ratios
+
+**Decision:** allow every manifest record to carry a `group_id` and assign complete groups to one
+split.
+
+**Why:** frames from the same SKU, lot, or capture session can be nearly identical. A visually
+balanced random image split can therefore report memorization as generalization. Greedy group-level
+allocation may miss exact ratios, but it protects the validity of the test set.
+
+## DD-010: Select checkpoints on validation detection quality
+
+**Decision:** save `best.pt` by validation mAP@50 and save `last.pt` independently for recovery.
+
+**Why:** falling training loss proves optimization, not generalization. Validation-based selection
+creates a defensible experiment protocol and records the selection metric in every run summary.
+
+**Rejected:** selecting by test mAP. Repeated test-based selection leaks final-evaluation information
+into development decisions.
+
+## DD-011: Separate operational counts, macro AP, and uncertainty
+
+**Decision:** report threshold-dependent micro counts separately from ranking-based per-class AP,
+exclude unsupported classes from macro AP, and offer image-bootstrap confidence intervals.
+
+**Why:** absent classes should not silently lower macro AP, but their predictions must still count as
+false alarms. A point estimate without sample uncertainty is especially misleading for small defect
+datasets.
+
+**Boundary:** the readable evaluator is COCO-inspired, not fully COCO-equivalent. Serious benchmark
+claims require cross-checking against the COCO API or a COCO-backed TorchMetrics evaluator.

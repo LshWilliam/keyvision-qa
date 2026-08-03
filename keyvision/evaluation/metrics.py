@@ -10,6 +10,8 @@ import numpy as np
 
 from keyvision.types import Detection
 
+METRIC_KEYS = ("precision", "recall", "f1", "map50", "map50_95")
+
 
 def box_iou(first: Sequence[float], second: Sequence[float]) -> float:
     """Compute intersection-over-union for two ``xyxy`` boxes."""
@@ -39,7 +41,7 @@ def _class_ap(
     ground_truth: Sequence[Sequence[Detection]],
     class_id: int,
     iou_threshold: float,
-) -> tuple[float, list[float], list[float]]:
+) -> tuple[float | None, list[float], list[float]]:
     candidates = sorted(
         (
             (detection.score, image_index, detection)
@@ -56,7 +58,7 @@ def _class_ap(
     }
     target_count = sum(len(items) for items in targets.values())
     if target_count == 0:
-        return 0.0, [], []
+        return None, [], []
     matched: dict[int, set[int]] = defaultdict(set)
     true_positives = []
     false_positives = []
@@ -87,22 +89,30 @@ def evaluate_detections(
     class_names: Sequence[str],
     match_iou: float = 0.5,
 ) -> dict[str, Any]:
-    """Calculate precision, recall, F1, COCO-style mAP, and per-class results."""
+    """Calculate operational counts and 101-point interpolated detection AP.
+
+    Macro AP excludes classes with no ground-truth support, matching standard
+    benchmark semantics. Those classes remain in ``per_class`` with null AP so
+    false alarms are still visible in operational precision counts.
+    """
 
     if len(predictions) != len(ground_truth):
         raise ValueError("predictions and ground_truth must have the same number of images")
     per_class: dict[str, dict[str, Any]] = {}
-    all_ap50 = []
-    all_coco_ap = []
+    all_ap50: list[float] = []
+    all_iou_averaged_ap: list[float] = []
     total_tp = total_fp = total_fn = 0
     for class_id, class_name in enumerate(class_names):
         ap50, recall_curve, precision_curve = _class_ap(
             predictions, ground_truth, class_id, match_iou
         )
         threshold_aps = [
-            _class_ap(predictions, ground_truth, class_id, float(threshold))[0]
+            value
             for threshold in np.arange(0.5, 1.0, 0.05)
+            if (value := _class_ap(predictions, ground_truth, class_id, float(threshold))[0])
+            is not None
         ]
+        ap50_95 = float(np.mean(threshold_aps)) if threshold_aps else None
         true_count = sum(
             detection.class_id == class_id
             for image_targets in ground_truth
@@ -125,12 +135,14 @@ def evaluate_detections(
             "recall": recall,
             "f1": f1,
             "ap50": ap50,
-            "ap50_95": float(np.mean(threshold_aps)),
+            "ap50_95": ap50_95,
             "support": true_count,
+            "predictions": prediction_count,
             "pr_curve": {"recall": recall_curve, "precision": precision_curve},
         }
-        all_ap50.append(ap50)
-        all_coco_ap.append(float(np.mean(threshold_aps)))
+        if ap50 is not None and ap50_95 is not None:
+            all_ap50.append(ap50)
+            all_iou_averaged_ap.append(ap50_95)
         total_tp += tp
         total_fp += fp
         total_fn += fn
@@ -143,7 +155,59 @@ def evaluate_detections(
         "recall": recall,
         "f1": f1,
         "map50": float(np.mean(all_ap50)) if all_ap50 else 0.0,
-        "map50_95": float(np.mean(all_coco_ap)) if all_coco_ap else 0.0,
+        "map50_95": float(np.mean(all_iou_averaged_ap)) if all_iou_averaged_ap else 0.0,
         "counts": {"tp": total_tp, "fp": total_fp, "fn": total_fn},
         "per_class": per_class,
+        "macro_averaging": "classes with at least one ground-truth instance",
+        "evaluated_class_count": len(all_ap50),
+        "absent_class_count": len(class_names) - len(all_ap50),
+    }
+
+
+def bootstrap_confidence_intervals(
+    predictions: Sequence[Sequence[Detection]],
+    ground_truth: Sequence[Sequence[Detection]],
+    class_names: Sequence[str],
+    samples: int = 1000,
+    confidence: float = 0.95,
+    seed: int = 42,
+    match_iou: float = 0.5,
+) -> dict[str, Any]:
+    """Estimate metric uncertainty by resampling images with replacement."""
+
+    if len(predictions) != len(ground_truth):
+        raise ValueError("predictions and ground_truth must have the same number of images")
+    if not predictions:
+        raise ValueError("bootstrap requires at least one image")
+    if samples < 1:
+        raise ValueError("samples must be positive")
+    if not 0.0 < confidence < 1.0:
+        raise ValueError("confidence must be in (0, 1)")
+
+    rng = np.random.default_rng(seed)
+    distributions: dict[str, list[float]] = {key: [] for key in METRIC_KEYS}
+    for _ in range(samples):
+        indices = rng.integers(0, len(predictions), size=len(predictions))
+        sampled_predictions = [predictions[int(index)] for index in indices]
+        sampled_ground_truth = [ground_truth[int(index)] for index in indices]
+        metrics = evaluate_detections(
+            sampled_predictions, sampled_ground_truth, class_names, match_iou
+        )
+        for key in METRIC_KEYS:
+            distributions[key].append(float(metrics[key]))
+
+    tail = (1.0 - confidence) / 2.0
+    intervals = {}
+    for key, values in distributions.items():
+        intervals[key] = {
+            "lower": float(np.quantile(values, tail)),
+            "median": float(np.quantile(values, 0.5)),
+            "upper": float(np.quantile(values, 1.0 - tail)),
+        }
+    return {
+        "method": "image-level bootstrap with replacement",
+        "samples": samples,
+        "confidence": confidence,
+        "seed": seed,
+        "metrics": intervals,
     }
